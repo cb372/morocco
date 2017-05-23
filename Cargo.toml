@@ -1,0 +1,10 @@
+[package]
+name = "squirrel"
+version = "0.1.0"
+authors = ["Chris Birchall <chris.birchall@gmail.com>"]
+
+[dependencies]
+clap = "2.24.2"
+#rusoto = {version = "0.24", features = ["kms", "dynamodb"]}
+rusoto_core = "0.25"
+rusoto_dynamodb = "0.25"
