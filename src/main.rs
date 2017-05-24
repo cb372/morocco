@@ -36,4 +36,19 @@ fn main() {
                     // TODO remaining subcommands
          )
         .get_matches();
+
+    // TODO this is just an example, we are ignoring the command line for now
+    
+    let aws = aws::AWS::new(None, "eu-west-1".to_string(), "squirrel".to_string());
+    match aws {
+        Ok(a) => {
+            match a.setup() {
+                Ok(result) => println!("Set up {}", result),
+                Err(e) => println!("Failed to set up Dynamo table! {}", e.message)
+            }
+            
+        },
+        Err(e) => println!("Failed to set up AWS client! {}", e.message)
+    }
+    
 }
