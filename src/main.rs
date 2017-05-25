@@ -17,7 +17,6 @@ fn main() {
     App::new("squirrel")
         .version("0.1.0")
         .about("Secure secret management in the cloud")
-        .author("Chris Birchall")
         .subcommand(SubCommand::with_name("aws")
                     .about("Use Amazon's Key Management Service for encryption and DynamoDB for storage")
                     .arg(Arg::with_name("profile")
@@ -31,6 +30,10 @@ fn main() {
                          .short("t")
                          .default_value("squirrel")
                          .help("use custom DynamoDB table"))
+                    .arg(Arg::with_name("key-alias")
+                         .short("k")
+                         .default_value("squirrel")
+                         .help("use custom KMS customer master key"))
                     .subcommand(SubCommand::with_name("setup"))
                     .subcommand(SubCommand::with_name("list"))
                     // TODO remaining subcommands
@@ -39,11 +42,11 @@ fn main() {
 
     // TODO this is just an example, we are ignoring the command line for now
     
-    let aws = aws::AWS::new(None, "eu-west-1".to_string(), "squirrel".to_string());
+    let aws = aws::AWS::new(None, "eu-west-1".to_string(), "squirrel".to_string(), "squirrel".to_string());
     match aws {
         Ok(a) => {
             match a.setup() {
-                Ok(result) => println!("Set up {}", result),
+                Ok(result) => println!("Set up complete. {}", result),
                 Err(e) => println!("Failed to set up Dynamo table! {}", e.message)
             }
             
