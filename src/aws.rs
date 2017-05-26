@@ -5,10 +5,13 @@ extern crate rusoto_kms;
 use std::str::FromStr;
 use std::error::Error;
 use std::convert::From;
+use std::default::Default;
 
 use self::rusoto_core::*;
 use self::rusoto_dynamodb::*;
 use self::rusoto_kms::*;
+
+use encryption::*;
 
 pub struct AWSError {
     pub message: String
@@ -50,6 +53,72 @@ impl AWS {
         Ok(format!("{} {}", create_table_result, create_key_result))
     }
 
+    pub fn list(&self) -> Result<Vec<String>, AWSError> {
+        let scan_input = ScanInput {
+            table_name: self.table_name.clone(),
+            ..Default::default()
+        };
+        match self.dynamo_client.scan(&scan_input) {
+            Ok(output) => {
+                let items = output.items.unwrap_or(Vec::new());
+                let ids = items.iter()
+                    .flat_map(|item| item.get("id"))
+                    .flat_map(|value| value.s.clone())
+                    .collect();
+                Ok(ids)
+            }
+            Err(err) => Err(AWSError::from(err))
+        }
+    }
+
+    pub fn get(&self, id: String) -> Result<Vec<u8>, AWSError> {
+        let key = [
+            ("id".to_string(), AttributeValue { s: Some(id), ..Default::default() })
+        ].iter().cloned().collect::<Key>();
+        let get_item_input = GetItemInput {
+            key: key,
+            table_name: self.table_name.clone(),
+            ..Default::default()
+        };
+        match self.dynamo_client.get_item(&get_item_input) {
+            Ok(output) => {
+                match output.item {
+                    Some(item) => self.decrypt_item(&item),
+                    None => Err(AWSError { message: "No secret found with that id".to_string() })
+                }
+            }
+            Err(err) => Err(AWSError::from(err))
+        }
+    }
+
+    // TODO refactor this beast
+    fn decrypt_item(&self, attribute_map: &AttributeMap) -> Result<Vec<u8>, AWSError> {
+        let encrypted_key_opt = attribute_map.get("encrypted_data_key").and_then(|x| x.b.clone());
+        let encrypted_data_opt = attribute_map.get("encrypted_data").and_then(|x| x.b.clone());
+        let iv_opt = attribute_map.get("iv").and_then(|x| x.b.clone());
+        match (encrypted_key_opt, encrypted_data_opt, iv_opt) {
+            (Some(encrypted_key), Some(encrypted_data), Some(iv)) => {
+                let decrypt_request = DecryptRequest {
+                    ciphertext_blob: encrypted_key,
+                    ..Default::default()
+                };
+                match self.kms_client.decrypt(&decrypt_request) {
+                    Ok(DecryptResponse { plaintext: Some(plaintext_key), key_id: _ }) => {
+                        match decrypt(encrypted_data.as_slice(), 
+                                      plaintext_key.as_slice(), 
+                                      iv.as_slice()) {
+                            Ok(plaintext_data) => Ok(plaintext_data),
+                            Err(_) => Err(AWSError { message: "Failed to decrypt secret".to_string() })
+                        }
+                    },
+                    Ok(_) => Err(AWSError { message: "Failed to decrypt the data key".to_string() }),
+                    Err(err) => Err(AWSError::from(err))
+                }
+            },
+            _ => Err(AWSError { message: "Item did not contain the expected fields".to_string() })
+        }
+    }
+
     fn build_creds_provider(profile: Option<String>) -> Result<DefaultCredentialsProvider, CredentialsError> {
         let mut profile_provider = ProfileProvider::new().unwrap();
         if profile.is_some() {
@@ -73,21 +142,19 @@ impl AWS {
         let table_name = self.table_name.clone();
         let create_table_input = CreateTableInput { 
             attribute_definitions: vec![ AttributeDefinition { 
-                attribute_name: "name".to_string(), 
+                attribute_name: "id".to_string(), 
                 attribute_type: "S".to_string() 
             } ],
-            global_secondary_indexes: None,
             key_schema: vec![ KeySchemaElement { 
-                attribute_name: "name".to_string(), 
+                attribute_name: "id".to_string(), 
                 key_type: "HASH".to_string() 
             } ],
-            local_secondary_indexes: None,
             provisioned_throughput: ProvisionedThroughput { 
                 read_capacity_units: 1, 
                 write_capacity_units: 1 
             },
-            stream_specification: None,
-            table_name: table_name
+            table_name: table_name,
+            ..Default::default()
         };
         self.dynamo_client.create_table(&create_table_input)?;
         Ok(())
@@ -118,11 +185,8 @@ impl AWS {
 
     fn create_master_key(&self) -> Result<(), AWSError> {
         let create_key_request = CreateKeyRequest { 
-            bypass_policy_lockout_safety_check: None,
             description: Some("Master key for encryption of secrets by squirrel".to_string()),
-            key_usage: None,
-            origin: None,
-            policy: None
+            ..Default::default()
         };
         let create_key_response = self.kms_client.create_key(&create_key_request)?;
         let key_id = create_key_response.key_metadata.unwrap().key_id;

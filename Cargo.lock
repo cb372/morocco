@@ -3,9 +3,11 @@ name = "squirrel"
 version = "0.1.0"
 dependencies = [
  "clap 2.24.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_core 0.25.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_dynamodb 0.25.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusoto_kms 0.25.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -472,6 +474,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-crypto"
+version = "0.2.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "gcc 0.3.46 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.23 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.37 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "rustc-serialize"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -830,6 +844,7 @@ dependencies = [
 "checksum rusoto_credential 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d2e36e3f3b2f9972ac78ced1a8f67ce4f11d09f577736b103562f25b63ba42c2"
 "checksum rusoto_dynamodb 0.25.0 (registry+https://github.com/rust-lang/crates.io-index)" = "cf803d91cabd9b602e92480cfe97b9cb3b5fc85e17447cd09c7ced0fad8be736"
 "checksum rusoto_kms 0.25.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f8f18c7a5c79a02ad352ed1573f1a5fad3e44c5595aa1bd32d1979eed8751015"
+"checksum rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)" = "f76d05d3993fd5f4af9434e8e436db163a12a9d40e1a58a726f27a01dfd12a2a"
 "checksum rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)" = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
 "checksum rustc_version 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "c5f5376ea5e30ce23c03eb77cbe4962b988deead10910c372b226388b594c084"
 "checksum schannel 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "c8b291854e37196c2b67249e09d6bdeff410b19e1acf05558168e9c4413b4e95"

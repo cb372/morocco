@@ -7,11 +7,13 @@ use clap::{Arg, App, SubCommand};
 // squirrel aws list
 // squirrel aws get my.secret
 // squirrel aws put my.secret "oh my god"
+// squirrel aws put --overwrite my.secret "oh my god"
 // squirrel aws delete my.secret
 // squirrel aws --profile foo --region eu-west-1 --table my-custom-table list
 // TODO research GCP more thoroughly
 
 mod aws;
+mod encryption;
 
 fn main() {
     App::new("squirrel")
@@ -48,6 +50,11 @@ fn main() {
             match a.setup() {
                 Ok(result) => println!("Set up complete. {}", result),
                 Err(e) => println!("Failed to set up Dynamo table! {}", e.message)
+            }
+
+            match a.get("foo".to_string()) {
+                Ok(result) => println!("get foo. Result: {}", String::from_utf8(result).unwrap()),
+                Err(e) => println!("Failed to do a get! {}", e.message)
             }
             
         },
