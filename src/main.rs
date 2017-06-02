@@ -52,6 +52,11 @@ fn main() {
                 Err(e) => println!("Failed to set up Dynamo table! {}", e.message)
             }
 
+            match a.put("foo".to_string(), "this is so secret".as_bytes().to_vec()) {
+                Ok(result) => println!("put foo."),
+                Err(e) => println!("Failed to do a put! {}", e.message)
+            }
+
             match a.get("foo".to_string()) {
                 Ok(result) => println!("get foo. Result: {}", String::from_utf8(result).unwrap()),
                 Err(e) => println!("Failed to do a get! {}", e.message)

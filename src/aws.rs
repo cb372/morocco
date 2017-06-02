@@ -17,6 +17,12 @@ pub struct AWSError {
     pub message: String
 }
 
+struct EncryptionResult {
+    encrypted_data_key: Vec<u8>,
+    encrypted_data: Vec<u8>,
+    iv: Vec<u8>
+}
+
 impl <A: Error> From<A> for AWSError {
     fn from(err: A) -> AWSError { 
         let message = String::from(err.description());
@@ -91,6 +97,54 @@ impl AWS {
         }
     }
 
+    pub fn put(&self, id: String, value: Vec<u8>) -> Result<(), AWSError> {
+        let encryption_result = self.encrypt_value(value)?;
+        let item = [
+            ("id".to_string(), AttributeValue { s: Some(id), ..Default::default() }),
+            ("encrypted_data_key".to_string(), AttributeValue { b: Some(encryption_result.encrypted_data_key), .. Default::default() }),
+            ("encrypted_data".to_string(), AttributeValue { b: Some(encryption_result.encrypted_data), .. Default::default() }),
+            ("iv".to_string(), AttributeValue { b: Some(encryption_result.iv), .. Default::default() })
+        ].iter().cloned().collect::<PutItemInputAttributeMap>();
+        let put_item_input = PutItemInput {
+            table_name: self.table_name.clone(),
+            item: item,
+            ..Default::default()
+        };
+        match self.dynamo_client.put_item(&put_item_input) {
+            Ok(output) => Ok(()),
+            Err(err) => Err(AWSError::from(err))
+        }
+    }
+
+    fn encrypt_value(&self, value: Vec<u8>) -> Result<EncryptionResult, AWSError> {
+        let gen_random_request = GenerateRandomRequest { 
+            number_of_bytes: Some(16)
+        };
+        let iv = self.kms_client.generate_random(&gen_random_request)
+            .map(|response| response.plaintext.unwrap())?;
+
+        let key_alias = self.key_alias.clone();
+        let key_id = format!("alias/{}", key_alias);
+        let gen_data_key_request = GenerateDataKeyRequest {
+            key_id: key_id,
+            number_of_bytes: Some(32),
+            .. Default::default()
+        };
+        let (encrypted_key, plaintext_key) = self.kms_client.generate_data_key(&gen_data_key_request)
+            .map(|response| (response.ciphertext_blob.unwrap(), response.plaintext.unwrap()))?;
+
+        match encrypt(value.as_slice(), 
+                       plaintext_key.as_slice(), 
+                       iv.as_slice()) {
+            Ok(ciphertext) => Ok(EncryptionResult {
+                encrypted_data_key: encrypted_key,
+                encrypted_data: ciphertext,
+                iv: iv
+            }),
+            Err(_) => Err(AWSError { message: "Failed to encrypt secret.".to_string() })
+        }
+    }
+
     // TODO refactor this beast
     fn decrypt_item(&self, attribute_map: &AttributeMap) -> Result<Vec<u8>, AWSError> {
         let encrypted_key_opt = attribute_map.get("encrypted_data_key").and_then(|x| x.b.clone());
@@ -103,7 +157,7 @@ impl AWS {
                     ..Default::default()
                 };
                 match self.kms_client.decrypt(&decrypt_request) {
-                    Ok(DecryptResponse { plaintext: Some(plaintext_key), key_id: _ }) => {
+                    Ok(DecryptResponse { plaintext: Some(plaintext_key), .. }) => {
                         match decrypt(encrypted_data.as_slice(), 
                                       plaintext_key.as_slice(), 
                                       iv.as_slice()) {
