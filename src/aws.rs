@@ -42,6 +42,11 @@ pub struct AWS {
     kms_client: Box<Kms>
 }
 
+// TODO refactor: separate Dynamo stuff and KMS stuff into submodules?
+// 275 lines in one file seems excessive.
+
+// TODO implement delete (can't be bothered right now)
+
 impl AWS {
 
     pub fn new(profile: Option<String>, region: String, table_name: String, key_alias: String) -> Result<AWS, AWSError> {
@@ -100,6 +105,7 @@ impl AWS {
         }
     }
 
+    // TODO support --overwrite (don't overwrite existing record unless the overwrite flag is true)
     pub fn put(&self, id: String, value: Vec<u8>) -> Result<(), AWSError> {
         let encryption_result = self.encrypt_value(value)?;
         // store as base64 string instead of binary to work around
@@ -116,7 +122,7 @@ impl AWS {
             ..Default::default()
         };
         match self.dynamo_client.put_item(&put_item_input) {
-            Ok(output) => Ok(()),
+            Ok(_) => Ok(()),
             Err(err) => Err(AWSError::from(err))
         }
     }
@@ -183,8 +189,8 @@ impl AWS {
 
     fn build_creds_provider(profile: Option<String>) -> Result<DefaultCredentialsProvider, CredentialsError> {
         let mut profile_provider = ProfileProvider::new().unwrap();
-        if profile.is_some() {
-            profile_provider.set_profile(profile.unwrap()); // Rust Option doesn't have a foreach method :(
+        if let Some(prof) = profile {
+            profile_provider.set_profile(prof); // Rust Option doesn't have a foreach method :(
         }
         let chain_provider = ChainProvider::with_profile_provider(profile_provider);
         AutoRefreshingProvider::with_refcell(chain_provider)
