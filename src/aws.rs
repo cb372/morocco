@@ -1,6 +1,8 @@
 extern crate rusoto_core;
 extern crate rusoto_dynamodb;
 extern crate rusoto_kms;
+extern crate base64;
+
 
 use std::str::FromStr;
 use std::error::Error;
@@ -10,6 +12,7 @@ use std::default::Default;
 use self::rusoto_core::*;
 use self::rusoto_dynamodb::*;
 use self::rusoto_kms::*;
+use self::base64::{encode, decode};
 
 use encryption::*;
 
@@ -99,11 +102,13 @@ impl AWS {
 
     pub fn put(&self, id: String, value: Vec<u8>) -> Result<(), AWSError> {
         let encryption_result = self.encrypt_value(value)?;
+        // store as base64 string instead of binary to work around
+        // https://github.com/rusoto/rusoto/issues/658
         let item = [
             ("id".to_string(), AttributeValue { s: Some(id), ..Default::default() }),
-            ("encrypted_data_key".to_string(), AttributeValue { b: Some(encryption_result.encrypted_data_key), .. Default::default() }),
-            ("encrypted_data".to_string(), AttributeValue { b: Some(encryption_result.encrypted_data), .. Default::default() }),
-            ("iv".to_string(), AttributeValue { b: Some(encryption_result.iv), .. Default::default() })
+            ("encrypted_data_key".to_string(), AttributeValue { s: Some(encode(&encryption_result.encrypted_data_key)), .. Default::default() }),
+            ("encrypted_data".to_string(), AttributeValue { s: Some(encode(&encryption_result.encrypted_data)), .. Default::default() }),
+            ("iv".to_string(), AttributeValue { s: Some(encode(&encryption_result.iv)), .. Default::default() })
         ].iter().cloned().collect::<PutItemInputAttributeMap>();
         let put_item_input = PutItemInput {
             table_name: self.table_name.clone(),
@@ -147,11 +152,14 @@ impl AWS {
 
     // TODO refactor this beast
     fn decrypt_item(&self, attribute_map: &AttributeMap) -> Result<Vec<u8>, AWSError> {
-        let encrypted_key_opt = attribute_map.get("encrypted_data_key").and_then(|x| x.b.clone());
-        let encrypted_data_opt = attribute_map.get("encrypted_data").and_then(|x| x.b.clone());
-        let iv_opt = attribute_map.get("iv").and_then(|x| x.b.clone());
+        let encrypted_key_opt = attribute_map.get("encrypted_data_key").and_then(|x| x.s.clone());
+        let encrypted_data_opt = attribute_map.get("encrypted_data").and_then(|x| x.s.clone());
+        let iv_opt = attribute_map.get("iv").and_then(|x| x.s.clone());
         match (encrypted_key_opt, encrypted_data_opt, iv_opt) {
-            (Some(encrypted_key), Some(encrypted_data), Some(iv)) => {
+            (Some(encrypted_key_base64), Some(encrypted_data_base64), Some(iv_base64)) => {
+                let encrypted_key = decode(&encrypted_key_base64)?;
+                let encrypted_data = decode(&encrypted_data_base64)?;
+                let iv = decode(&iv_base64)?;
                 let decrypt_request = DecryptRequest {
                     ciphertext_blob: encrypted_key,
                     ..Default::default()
