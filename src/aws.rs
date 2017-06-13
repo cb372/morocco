@@ -5,8 +5,6 @@ extern crate base64;
 
 
 use std::str::FromStr;
-use std::error::Error;
-use std::convert::From;
 use std::default::Default;
 
 use self::rusoto_core::*;
@@ -14,25 +12,13 @@ use self::rusoto_dynamodb::*;
 use self::rusoto_kms::*;
 use self::base64::{encode, decode};
 
+use squirrel::*;
 use encryption::*;
-
-pub struct AWSError {
-    pub message: String
-}
 
 struct EncryptionResult {
     encrypted_data_key: Vec<u8>,
     encrypted_data: Vec<u8>,
     iv: Vec<u8>
-}
-
-impl <A: Error> From<A> for AWSError {
-    fn from(err: A) -> AWSError { 
-        let message = String::from(err.description());
-        AWSError { 
-            message
-        }
-    }
 }
 
 pub struct AWS {
@@ -47,27 +33,17 @@ pub struct AWS {
 
 // TODO implement delete (can't be bothered right now)
 
-impl AWS {
+// TODO store values as binary when rusoto fix is released
 
-    pub fn new(profile: Option<String>, region: String, table_name: String, key_alias: String) -> Result<AWS, AWSError> {
-        let reg = Region::from_str(region.as_str())?;
-        let dynamo_client = DynamoDbClient::new(default_tls_client()?, AWS::build_creds_provider(profile.clone())?, reg);
-        let kms_client = KmsClient::new(default_tls_client()?, AWS::build_creds_provider(profile.clone())?, reg);
-        Ok(AWS {
-            table_name: table_name,
-            key_alias: key_alias,
-            dynamo_client: Box::new(dynamo_client),
-            kms_client: Box::new(kms_client)
-        })
-    }
+impl Squirrel for AWS {
 
-    pub fn setup(&self) -> Result<String, AWSError> {
+    fn setup(&self) -> Result<String, SquirrelError> {
         let create_table_result = self.create_table_if_does_not_exist()?;
         let create_key_result = self.create_master_key_if_does_not_exist()?;
         Ok(format!("{} {}", create_table_result, create_key_result))
     }
 
-    pub fn list(&self) -> Result<Vec<String>, AWSError> {
+    fn list(&self) -> Result<Vec<String>, SquirrelError> {
         let scan_input = ScanInput {
             table_name: self.table_name.clone(),
             ..Default::default()
@@ -81,11 +57,11 @@ impl AWS {
                     .collect();
                 Ok(ids)
             }
-            Err(err) => Err(AWSError::from(err))
+            Err(err) => Err(SquirrelError::from(err))
         }
     }
 
-    pub fn get(&self, id: String) -> Result<Vec<u8>, AWSError> {
+    fn get(&self, id: String) -> Result<Vec<u8>, SquirrelError> {
         let key = [
             ("id".to_string(), AttributeValue { s: Some(id), ..Default::default() })
         ].iter().cloned().collect::<Key>();
@@ -98,15 +74,15 @@ impl AWS {
             Ok(output) => {
                 match output.item {
                     Some(item) => self.decrypt_item(&item),
-                    None => Err(AWSError { message: "No secret found with that id".to_string() })
+                    None => Err(SquirrelError { message: "No secret found with that id".to_string() })
                 }
             }
-            Err(err) => Err(AWSError::from(err))
+            Err(err) => Err(SquirrelError::from(err))
         }
     }
 
     // TODO support --overwrite (don't overwrite existing record unless the overwrite flag is true)
-    pub fn put(&self, id: String, value: Vec<u8>) -> Result<(), AWSError> {
+    fn put(&self, id: String, value: Vec<u8>) -> Result<(), SquirrelError> {
         let encryption_result = self.encrypt_value(value)?;
         // store as base64 string instead of binary to work around
         // https://github.com/rusoto/rusoto/issues/658
@@ -123,11 +99,27 @@ impl AWS {
         };
         match self.dynamo_client.put_item(&put_item_input) {
             Ok(_) => Ok(()),
-            Err(err) => Err(AWSError::from(err))
+            Err(err) => Err(SquirrelError::from(err))
         }
     }
 
-    fn encrypt_value(&self, value: Vec<u8>) -> Result<EncryptionResult, AWSError> {
+}
+
+impl AWS {
+
+    pub fn new(profile: Option<String>, region: String, table_name: String, key_alias: String) -> Result<AWS, SquirrelError> {
+        let reg = Region::from_str(region.as_str())?;
+        let dynamo_client = DynamoDbClient::new(default_tls_client()?, AWS::build_creds_provider(profile.clone())?, reg);
+        let kms_client = KmsClient::new(default_tls_client()?, AWS::build_creds_provider(profile.clone())?, reg);
+        Ok(AWS {
+            table_name: table_name,
+            key_alias: key_alias,
+            dynamo_client: Box::new(dynamo_client),
+            kms_client: Box::new(kms_client)
+        })
+    }
+
+    fn encrypt_value(&self, value: Vec<u8>) -> Result<EncryptionResult, SquirrelError> {
         let gen_random_request = GenerateRandomRequest { 
             number_of_bytes: Some(16)
         };
@@ -152,12 +144,12 @@ impl AWS {
                 encrypted_data: ciphertext,
                 iv: iv
             }),
-            Err(_) => Err(AWSError { message: "Failed to encrypt secret.".to_string() })
+            Err(_) => Err(SquirrelError { message: "Failed to encrypt secret.".to_string() })
         }
     }
 
     // TODO refactor this beast
-    fn decrypt_item(&self, attribute_map: &AttributeMap) -> Result<Vec<u8>, AWSError> {
+    fn decrypt_item(&self, attribute_map: &AttributeMap) -> Result<Vec<u8>, SquirrelError> {
         let encrypted_key_opt = attribute_map.get("encrypted_data_key").and_then(|x| x.s.clone());
         let encrypted_data_opt = attribute_map.get("encrypted_data").and_then(|x| x.s.clone());
         let iv_opt = attribute_map.get("iv").and_then(|x| x.s.clone());
@@ -176,14 +168,14 @@ impl AWS {
                                       plaintext_key.as_slice(), 
                                       iv.as_slice()) {
                             Ok(plaintext_data) => Ok(plaintext_data),
-                            Err(_) => Err(AWSError { message: "Failed to decrypt secret".to_string() })
+                            Err(_) => Err(SquirrelError { message: "Failed to decrypt secret".to_string() })
                         }
                     },
-                    Ok(_) => Err(AWSError { message: "Failed to decrypt the data key".to_string() }),
-                    Err(err) => Err(AWSError::from(err))
+                    Ok(_) => Err(SquirrelError { message: "Failed to decrypt the data key".to_string() }),
+                    Err(err) => Err(SquirrelError::from(err))
                 }
             },
-            _ => Err(AWSError { message: "Item did not contain the expected fields".to_string() })
+            _ => Err(SquirrelError { message: "Item did not contain the expected fields".to_string() })
         }
     }
 
@@ -196,17 +188,17 @@ impl AWS {
         AutoRefreshingProvider::with_refcell(chain_provider)
     }
 
-    fn does_table_exist(&self) -> Result<bool, AWSError> {
+    fn does_table_exist(&self) -> Result<bool, SquirrelError> {
         let table_name = self.table_name.clone();
         let describe_table_input = DescribeTableInput { table_name };
         match self.dynamo_client.describe_table(&describe_table_input) {
             Ok(output) => Ok(output.table.is_some()),
             Err(DescribeTableError::ResourceNotFound(_)) => Ok(false),
-            Err(other) => Err(AWSError::from(other))
+            Err(other) => Err(SquirrelError::from(other))
         }
     }
 
-    fn create_table(&self) -> Result<(), AWSError> {
+    fn create_table(&self) -> Result<(), SquirrelError> {
         let table_name = self.table_name.clone();
         let create_table_input = CreateTableInput { 
             attribute_definitions: vec![ AttributeDefinition { 
@@ -228,7 +220,7 @@ impl AWS {
         Ok(())
     }
 
-    fn create_table_if_does_not_exist(&self) -> Result<&str, AWSError> {
+    fn create_table_if_does_not_exist(&self) -> Result<&str, SquirrelError> {
         if self.does_table_exist()? {
             Ok("Dynamo table already existed.")
         } else {
@@ -237,7 +229,7 @@ impl AWS {
         }
     }
 
-    fn does_master_key_exist(&self) -> Result<bool, AWSError> {
+    fn does_master_key_exist(&self) -> Result<bool, SquirrelError> {
         let key_alias = self.key_alias.clone();
         let key_id = format!("alias/{}", key_alias);
         let describe_key_request = DescribeKeyRequest { 
@@ -247,11 +239,11 @@ impl AWS {
         match self.kms_client.describe_key(&describe_key_request) {
             Ok(response) => Ok(response.key_metadata.is_some()),
             Err(DescribeKeyError::NotFound(_)) => Ok(false),
-            Err(other) => Err(AWSError::from(other))
+            Err(other) => Err(SquirrelError::from(other))
         }
     }
 
-    fn create_master_key(&self) -> Result<(), AWSError> {
+    fn create_master_key(&self) -> Result<(), SquirrelError> {
         let create_key_request = CreateKeyRequest { 
             description: Some("Master key for encryption of secrets by squirrel".to_string()),
             ..Default::default()
@@ -268,7 +260,7 @@ impl AWS {
         Ok(result)
     }
 
-    fn create_master_key_if_does_not_exist(&self) -> Result<&str, AWSError> {
+    fn create_master_key_if_does_not_exist(&self) -> Result<&str, SquirrelError> {
         if self.does_master_key_exist()? {
             Ok("Customer master key already existed.")
         } else {

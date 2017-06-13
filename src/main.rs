@@ -5,6 +5,13 @@ use clap::{Arg, App, SubCommand, ArgMatches};
 use std::io::stderr;
 use std::io::Write;
 
+mod squirrel;
+mod aws;
+mod encryption;
+
+use squirrel::{Squirrel, SquirrelError};
+use aws::AWS;
+
 // Examples of valid commands:
 // squirrel aws setup
 // squirrel aws list
@@ -15,8 +22,6 @@ use std::io::Write;
 // squirrel aws --profile foo --region eu-west-1 --table my-custom-table list
 // TODO similar commands for GCP
 
-mod aws;
-mod encryption;
 
 fn main() {
     let matches = App::new("squirrel")
@@ -65,62 +70,67 @@ fn main() {
         .get_matches();
 
     if let Some(aws_matches) = matches.subcommand_matches("aws") {
-        run_aws_subcommand(aws_matches);
+        match construct_aws(aws_matches) {
+            Ok(aws) => run_subcommand(aws, aws_matches),
+            Err(err) => {
+                println!("Failed to initialise AWS client. Error: {}", err.message);
+                println!("{}", matches.usage())
+            }
+        }
     } else {
         println!("{}", matches.usage());
     }
     
 }
 
-fn run_aws_subcommand(matches: &ArgMatches) {
+fn construct_aws(matches: &ArgMatches) -> Result<AWS, SquirrelError> {
     let profile = matches.value_of("profile").map(|s| s.to_string());
     let region = matches.value_of("region").unwrap().to_string();
     let table = matches.value_of("table").unwrap().to_string();
     let key_alias = matches.value_of("key-alias").unwrap().to_string();
-    match aws::AWS::new(profile, region, table, key_alias) {
-        Ok(aws) => {
-            match matches.subcommand() {
-                ("setup", _) => {
-                    match aws.setup() {
-                        Ok(result) => println!("Set up complete. {}", result),
-                        Err(e) => writeln!(stderr(), "Failed to set up KMS customer master key and/or Dynamo table! {}", e.message).unwrap()
-                    }
-                },
+    aws::AWS::new(profile, region, table, key_alias)
+}
 
-                ("list", _) => {
-                    match aws.list() {
-                        Ok(ids) => {
-                            for id in ids {
-                                println!("{}", id);
-                            }
-                        },
-                        Err(e) => writeln!(stderr(), "Failed to list secrets! {}", e.message).unwrap()
-                    }
-                },
-
-                ("get", Some(get_matches)) => {
-                    let id = get_matches.value_of("ID").unwrap().to_string();
-                    match aws.get(id) {
-                        Ok(value) => println!("{}", String::from_utf8(value).unwrap()),
-                        Err(e) => println!("Failed to retrieve secret! {}", e.message)
-                    }
-                },
-
-                ("put", Some(put_matches)) => {
-                    let id = put_matches.value_of("ID").unwrap().to_string();
-                    let value = put_matches.value_of("VALUE").unwrap().as_bytes().to_vec();
-                    // TODO support --overwrite
-                    match aws.put(id, value) {
-                        Ok(_) => println!("Stored secret."),
-                        Err(e) => println!("Failed to store secret! {}", e.message)
-                    }
-                }
-
-                // TODO support delete
-                
-                (other, _) => writeln!(stderr(), "Unknown subcommand: {}", other).unwrap()
+fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
+    match matches.subcommand() {
+        ("setup", _) => {
+            match squirrel.setup() {
+                Ok(result) => println!("Set up complete. {}", result),
+                Err(e) => writeln!(stderr(), "Failed to set up KMS customer master key and/or Dynamo table! {}", e.message).unwrap()
             }
         },
-        Err(e) => println!("Failed to set up AWS client! {}", e.message)
+
+        ("list", _) => {
+            match squirrel.list() {
+                Ok(ids) => {
+                    for id in ids {
+                        println!("{}", id);
+                    }
+                },
+                Err(e) => writeln!(stderr(), "Failed to list secrets! {}", e.message).unwrap()
+            }
+        },
+
+        ("get", Some(get_matches)) => {
+            let id = get_matches.value_of("ID").unwrap().to_string();
+            match squirrel.get(id) {
+                Ok(value) => println!("{}", String::from_utf8(value).unwrap()),
+                Err(e) => println!("Failed to retrieve secret! {}", e.message)
+            }
+        },
+
+        ("put", Some(put_matches)) => {
+            let id = put_matches.value_of("ID").unwrap().to_string();
+            let value = put_matches.value_of("VALUE").unwrap().as_bytes().to_vec();
+            // TODO support --overwrite
+            match squirrel.put(id, value) {
+                Ok(_) => println!("Stored secret."),
+                Err(e) => println!("Failed to store secret! {}", e.message)
+            }
+        },
+
+        // TODO support delete
+        
+        _ => println!("{}", matches.usage())
     }
 }
