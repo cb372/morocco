@@ -1,10 +1,7 @@
 extern crate crypto;
-extern crate rand;
 
 use self::crypto::{ symmetriccipher, buffer, aes, blockmodes };
 use self::crypto::buffer::{ ReadBuffer, WriteBuffer, BufferResult };
-
-//use self::rand::{ Rng, OsRng };
 
 // Based on (i.e. copy-pasted from) 
 // https://github.com/DaGenix/rust-crypto/blob/master/examples/symmetriccipher.rs
@@ -93,4 +90,27 @@ pub fn decrypt(encrypted_data: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, 
     Ok(final_result)
 }
 
-// TODO write a roundtrip test
+#[cfg(test)]
+mod tests {
+    extern crate rand;
+
+    use super::*;
+    use self::rand::{ Rng, OsRng };
+
+    #[test]
+    fn encryption_round_trip() {
+        let message = "hey this is very top secret information";
+        
+        let mut rng = OsRng::new().ok().unwrap();
+
+        let mut key: [u8; 32] = [0; 32];
+        let mut iv: [u8; 16] = [0; 16];
+        rng.fill_bytes(&mut key);
+        rng.fill_bytes(&mut iv);
+
+        let encrypted_data = encrypt(message.as_bytes(), &key, &iv).ok().unwrap();
+        let decrypted_data = decrypt(&encrypted_data[..], &key, &iv).ok().unwrap();
+
+        assert_eq!(message, String::from_utf8(decrypted_data).unwrap());
+    }
+}
