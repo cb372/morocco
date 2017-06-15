@@ -1,6 +1,6 @@
-use squirrel::SquirrelError;
-
 extern crate rusoto_kms;
+
+use squirrel::SquirrelError;
 
 use self::rusoto_kms::*;
 
