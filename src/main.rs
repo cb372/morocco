@@ -10,7 +10,7 @@ mod squirrel;
 mod aws;
 mod encryption;
 
-use squirrel::{Squirrel, SquirrelError, DeletionResult};
+use squirrel::*;
 use aws::AWS;
 
 // Examples of valid commands:
@@ -31,18 +31,22 @@ fn main() {
         .subcommand(SubCommand::with_name("aws")
                     .about("Use Amazon's Key Management Service for encryption and DynamoDB for storage")
                     .arg(Arg::with_name("profile")
+                         .long("profile")
                          .short("p")
                          .takes_value(true)
                          .help("use custom IAM profile"))
                     .arg(Arg::with_name("region")
+                         .long("region")
                          .short("r")
                          .default_value("eu-west-1")
                          .help("use custom AWS region"))
                     .arg(Arg::with_name("table")
+                         .long("table")
                          .short("t")
                          .default_value("squirrel")
                          .help("use custom DynamoDB table"))
                     .arg(Arg::with_name("key-alias")
+                         .long("key-alias")
                          .short("k")
                          .default_value("squirrel")
                          .help("use custom KMS customer master key"))
@@ -54,8 +58,9 @@ fn main() {
                                      .index(1)))
                     .subcommand(SubCommand::with_name("put")
                                 .arg(Arg::with_name("overwrite")
+                                     .long("overwrite")
                                      .short("o")
-                                     .default_value("false")
+                                     .takes_value(false)
                                      .help("overwrite the record if it already exists"))
                                 .arg(Arg::with_name("ID")
                                      .required(true)
@@ -122,9 +127,10 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
         ("put", Some(put_matches)) => {
             let id = put_matches.value_of("ID").unwrap().to_string();
             let value = put_matches.value_of("VALUE").unwrap().as_bytes().to_vec();
-            // TODO support --overwrite
-            match squirrel.put(id, value) {
-                Ok(_) => println!("Stored secret."),
+            let overwrite = put_matches.is_present("overwrite");
+            match squirrel.put(id, value, overwrite) {
+                Ok(PutResult::Stored) => println!("Stored secret."),
+                Ok(PutResult::DidNotOverwrite) => bail(format!("Failed to store secret! It was already present. If you want to overwrite the existing value, please use the --overwrite option.")),
                 Err(e) => bail(format!("Failed to store secret! {}", e.message))
             }
         },

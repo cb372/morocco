@@ -1,7 +1,7 @@
 extern crate rusoto_dynamodb;
 extern crate base64;
 
-use squirrel::{SquirrelError,DeletionResult};
+use squirrel::{SquirrelError, PutResult, DeletionResult};
 use aws::Item;
 
 use self::rusoto_dynamodb::*;
@@ -59,22 +59,36 @@ impl DynamoOps {
         }
     }
 
-    pub fn put_item(&self, id: String, item: Item) -> Result<(), SquirrelError> {
+    pub fn put_item(&self, id: String, item: Item, overwrite: bool) -> Result<PutResult, SquirrelError> {
         // store as base64 string instead of binary to work around
         // https://github.com/rusoto/rusoto/issues/658
         let attributes = [
-            ("id".to_string(), AttributeValue { s: Some(id), ..Default::default() }),
-            ("encrypted_data_key".to_string(), AttributeValue { s: Some(encode(&item.encrypted_data_key)), .. Default::default() }),
-            ("encrypted_data".to_string(), AttributeValue { s: Some(encode(&item.encrypted_data)), .. Default::default() }),
-            ("iv".to_string(), AttributeValue { s: Some(encode(&item.iv)), .. Default::default() })
+            ("id".to_string(), 
+             AttributeValue { s: Some(id), ..Default::default() }),
+
+            ("encrypted_data_key".to_string(), 
+             AttributeValue { s: Some(encode(&item.encrypted_data_key)), .. Default::default() }),
+
+            ("encrypted_data".to_string(), 
+             AttributeValue { s: Some(encode(&item.encrypted_data)), .. Default::default() }),
+
+            ("iv".to_string(), 
+             AttributeValue { s: Some(encode(&item.iv)), .. Default::default() })
         ].iter().cloned().collect::<PutItemInputAttributeMap>();
+
+        let condition_expr =
+            if overwrite { None } else { Some("attribute_not_exists(id)".to_string()) };
+
         let put_item_input = PutItemInput {
             table_name: self.table_name.clone(),
             item: attributes,
+            condition_expression: condition_expr,
             ..Default::default()
         };
+
         match self.dynamo_client.put_item(&put_item_input) {
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(PutResult::Stored),
+            Err(PutItemError::ConditionalCheckFailed(_)) => Ok(PutResult::DidNotOverwrite),
             Err(err) => Err(SquirrelError::from(err))
         }
     }

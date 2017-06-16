@@ -47,10 +47,9 @@ impl Squirrel for AWS {
         self.decrypt_item(item)
     }
 
-    // TODO support --overwrite (don't overwrite existing record unless the overwrite flag is true)
-    fn put(&self, id: String, value: Vec<u8>) -> Result<(), SquirrelError> {
+    fn put(&self, id: String, value: Vec<u8>, overwrite: bool) -> Result<PutResult, SquirrelError> {
         let item = self.encrypt_value(value)?;
-        self.dynamo_ops.put_item(id, item)
+        self.dynamo_ops.put_item(id, item, overwrite)
     }
 
     fn delete(&self, id: String) -> Result<DeletionResult, SquirrelError> {
