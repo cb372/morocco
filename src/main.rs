@@ -4,6 +4,7 @@ use clap::{Arg, App, SubCommand, ArgMatches};
 
 use std::io::stderr;
 use std::io::Write;
+use std::process::exit;
 
 mod squirrel;
 mod aws;
@@ -73,12 +74,11 @@ fn main() {
         match construct_aws(aws_matches) {
             Ok(aws) => run_subcommand(aws, aws_matches),
             Err(err) => {
-                println!("Failed to initialise AWS client. Error: {}", err.message);
-                println!("{}", matches.usage())
+                bail(format!("Failed to initialise AWS client. Error: {}\n{}", err.message, matches.usage()));
             }
         }
     } else {
-        println!("{}", matches.usage());
+        bail(matches.usage().to_string());
     }
     
 }
@@ -96,7 +96,7 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
         ("setup", _) => {
             match squirrel.setup() {
                 Ok(result) => println!("Set up complete. {}", result),
-                Err(e) => writeln!(stderr(), "Failed to set up KMS customer master key and/or Dynamo table! {}", e.message).unwrap()
+                Err(e) => bail(format!("Failed to set up KMS customer master key and/or Dynamo table! {}", e.message))
             }
         },
 
@@ -107,7 +107,7 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
                         println!("{}", id);
                     }
                 },
-                Err(e) => writeln!(stderr(), "Failed to list secrets! {}", e.message).unwrap()
+                Err(e) => bail(format!("Failed to list secrets! {}", e.message))
             }
         },
 
@@ -115,7 +115,7 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
             let id = get_matches.value_of("ID").unwrap().to_string();
             match squirrel.get(id) {
                 Ok(value) => println!("{}", String::from_utf8(value).unwrap()),
-                Err(e) => println!("Failed to retrieve secret! {}", e.message)
+                Err(e) => bail(format!("Failed to retrieve secret! {}", e.message))
             }
         },
 
@@ -125,12 +125,17 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
             // TODO support --overwrite
             match squirrel.put(id, value) {
                 Ok(_) => println!("Stored secret."),
-                Err(e) => println!("Failed to store secret! {}", e.message)
+                Err(e) => bail(format!("Failed to store secret! {}", e.message))
             }
         },
 
         // TODO support delete
         
-        _ => println!("{}", matches.usage())
+        _ => bail(matches.usage().to_string())
     }
+}
+
+fn bail(message: String) {
+    writeln!(stderr(), "{}", message).unwrap();
+    exit(1)
 }
