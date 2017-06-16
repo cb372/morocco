@@ -2,6 +2,13 @@
 name = "morocco"
 version = "0.1.0"
 authors = ["Chris Birchall <chris.birchall@gmail.com>"]
+description = "Store your secrets securely in the cloud."
+readme = "README.md"
+repository = "https://github.com/cb372/morocco"
+license = "Apache-2.0"
+
+[badges]
+travis-ci = { repository = "cb372/morocco", branch = "master" }
 
 [dependencies]
 clap = "2.24.2"
