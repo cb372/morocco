@@ -10,7 +10,7 @@ mod squirrel;
 mod aws;
 mod encryption;
 
-use squirrel::{Squirrel, SquirrelError};
+use squirrel::{Squirrel, SquirrelError, DeletionResult};
 use aws::AWS;
 
 // Examples of valid commands:
@@ -129,7 +129,15 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
             }
         },
 
-        // TODO support delete
+        ("delete", Some(get_matches)) => {
+            let id = get_matches.value_of("ID").unwrap().to_string();
+            match squirrel.delete(id) {
+                Ok(DeletionResult::Deleted) => println!("{}", "Deleted secret."),
+                Ok(DeletionResult::NotFound) => bail(format!("Failed to delete secret! No secret found with that ID.")),
+                Err(e) => bail(format!("Failed to delete secret! {}", e.message))
+            }
+        },
+
         
         _ => bail(matches.usage().to_string())
     }

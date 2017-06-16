@@ -14,6 +14,16 @@ impl <A: Error> From<A> for SquirrelError {
     }
 }
 
+pub enum PutResult {
+    Stored,
+    DidNotOverwrite
+}
+
+pub enum DeletionResult {
+    Deleted,
+    NotFound
+}
+
 pub trait Squirrel {
 
     fn setup(&self) -> Result<String, SquirrelError>;
@@ -23,5 +33,7 @@ pub trait Squirrel {
     fn get(&self, id: String) -> Result<Vec<u8>, SquirrelError>;
 
     fn put(&self, id: String, value: Vec<u8>) -> Result<(), SquirrelError>;
+
+    fn delete(&self, id: String) -> Result<DeletionResult, SquirrelError>;
 
 }

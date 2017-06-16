@@ -28,8 +28,6 @@ pub struct AWS {
     kms_ops: KmsOps
 }
 
-// TODO implement delete (can't be bothered right now)
-
 // TODO store values as binary when rusoto fix is released
 
 impl Squirrel for AWS {
@@ -53,6 +51,10 @@ impl Squirrel for AWS {
     fn put(&self, id: String, value: Vec<u8>) -> Result<(), SquirrelError> {
         let item = self.encrypt_value(value)?;
         self.dynamo_ops.put_item(id, item)
+    }
+
+    fn delete(&self, id: String) -> Result<DeletionResult, SquirrelError> {
+        self.dynamo_ops.delete_item(id)
     }
 
 }

@@ -1,7 +1,7 @@
 extern crate rusoto_dynamodb;
 extern crate base64;
 
-use squirrel::SquirrelError;
+use squirrel::{SquirrelError,DeletionResult};
 use aws::Item;
 
 use self::rusoto_dynamodb::*;
@@ -52,7 +52,7 @@ impl DynamoOps {
             Ok(output) => {
                 match output.item {
                     Some(attr_map) => attribute_map_to_item(&attr_map),
-                    None => Err(SquirrelError { message: "No secret found with that id".to_string() })
+                    None => Err(SquirrelError { message: "No secret found with that ID.".to_string() })
                 }
             }
             Err(err) => Err(SquirrelError::from(err))
@@ -75,6 +75,23 @@ impl DynamoOps {
         };
         match self.dynamo_client.put_item(&put_item_input) {
             Ok(_) => Ok(()),
+            Err(err) => Err(SquirrelError::from(err))
+        }
+    }
+
+    pub fn delete_item(&self, id: String) -> Result<DeletionResult, SquirrelError> {
+        let key = [
+            ("id".to_string(), AttributeValue { s: Some(id), ..Default::default() })
+        ].iter().cloned().collect::<Key>();
+        let delete_item_input = DeleteItemInput {
+            key: key,
+            table_name: self.table_name.clone(),
+            condition_expression: Some("attribute_exists(id)".to_string()),
+            ..Default::default()
+        };
+        match self.dynamo_client.delete_item(&delete_item_input) {
+            Ok(_) => Ok(DeletionResult::Deleted),
+            Err(DeleteItemError::ConditionalCheckFailed(_)) => Ok(DeletionResult::NotFound),
             Err(err) => Err(SquirrelError::from(err))
         }
     }
