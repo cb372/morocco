@@ -1,0 +1,63 @@
+# Based on the "trust" template v0.1.1
+# https://github.com/japaric/trust/tree/v0.1.1
+
+dist: trusty
+language: rust
+services: docker
+sudo: required
+
+env:
+  global:
+    - CRATE_NAME=morocco
+
+matrix:
+  include:
+    # Linux
+    - env: TARGET=i686-unknown-linux-gnu
+    - env: TARGET=x86_64-unknown-linux-gnu
+
+    # OSX
+    - env: TARGET=i686-apple-darwin
+      os: osx
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+
+before_install: set -e
+
+install:
+  - sh ci/install.sh
+  - source ~/.cargo/env || true
+
+script:
+  - bash ci/script.sh
+
+after_script: set +e
+
+before_deploy:
+  - sh ci/before_deploy.sh
+
+deploy:
+  api_key:
+    secure: "ml/cWdLNJYzAT4rL7R1XOJlNEpio3UOTio8pnEfhR+1QuO/DWMk+4MvWyhPwU6+bhEsdXNKvBwcTEjRHPb8MlfUrUPGcPZmaXDeBhyykdYHWb9NvnJp7ODc7+/lAwO8pUa3mxoU9Z7Hb9kU8bOtFkcKqdkYkDxjw80OwF0uFfMBvJXRGBYZ/7UmSfilFO3qogMTr1A7+tRdQ83c6U3RwWPGysStYiXeaiDP9NvRUB9g260oMHY7zgxVuEbH8quxFnu29sPNmufCaxa+oTlJrZGJWxpzMjsROaq66gHHOgB7jG+lSk+SgHu/zlU83tvKZxIQVVxJD2pmxvoxKao35n8W/0mkau7+Q3yesICFDUosdTRWp7A8ICSAntNS/VY5t0xghcXcJGQlhPCFL4lghJLef9gO5Ke3nJRUGtlq1kyoaO8VXzIix4Pm+XatFZtuSR26WFRxTu1vG8qmLFXHG25aMuHFeN4dM6SwntZUkf1JiKiET0J2ZKrzby7q3dOOfz5L7zBEDqwS1jARCRAdi8SH9TqIKc37WfJdBBBDlc83Z7jdYCwW7WGg3mNWoxpnnkp99Td3Tgcz+U0QsdTHQYHskY6xMwiRSRZ8XUp9XqbRpt1S1ZcNv3ykEgyu5TtqR+m4W0vDZrKZmI4C72CMVo/fVJS7ZOdT6FrhLqggqXAk="
+  file_glob: true
+  file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
+  on:
+    condition: $TRAVIS_RUST_VERSION = stable
+    tags: true
+  provider: releases
+  skip_cleanup: true
+
+cache: cargo
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
+
+branches:
+  only:
+    # release tags
+    - /^v\d+\.\d+\.\d+.*$/
+    - master
+
+notifications:
+  email:
+    on_success: never
