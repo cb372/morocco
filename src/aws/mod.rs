@@ -39,7 +39,9 @@ impl Morocco for AWS {
     }
 
     fn list(&self) -> Result<Vec<String>, MoroccoError> {
-        self.dynamo_ops.list_ids()
+        let mut result = self.dynamo_ops.list_ids()?;
+        result.sort();
+        Ok(result)
     }
 
     fn get(&self, id: String) -> Result<Vec<u8>, MoroccoError> {
