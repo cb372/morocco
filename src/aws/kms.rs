@@ -1,6 +1,6 @@
 extern crate rusoto_kms;
 
-use squirrel::SquirrelError;
+use morocco::MoroccoError;
 
 use self::rusoto_kms::*;
 
@@ -23,7 +23,7 @@ impl KmsOps {
         }
     }
 
-    pub fn does_master_key_exist(&self) -> Result<bool, SquirrelError> {
+    pub fn does_master_key_exist(&self) -> Result<bool, MoroccoError> {
         let describe_key_request = DescribeKeyRequest { 
             grant_tokens: None,
             key_id: self.key_id.clone()
@@ -31,13 +31,13 @@ impl KmsOps {
         match self.kms_client.describe_key(&describe_key_request) {
             Ok(response) => Ok(response.key_metadata.is_some()),
             Err(DescribeKeyError::NotFound(_)) => Ok(false),
-            Err(other) => Err(SquirrelError::from(other))
+            Err(other) => Err(MoroccoError::from(other))
         }
     }
 
-    pub fn create_master_key(&self) -> Result<(), SquirrelError> {
+    pub fn create_master_key(&self) -> Result<(), MoroccoError> {
         let create_key_request = CreateKeyRequest { 
-            description: Some("Master key for encryption of secrets by squirrel".to_string()),
+            description: Some("Master key for encryption of secrets by morocco".to_string()),
             ..Default::default()
         };
         let create_key_response = self.kms_client.create_key(&create_key_request)?;
@@ -51,7 +51,7 @@ impl KmsOps {
         Ok(result)
     }
 
-    pub fn create_master_key_if_does_not_exist(&self) -> Result<&str, SquirrelError> {
+    pub fn create_master_key_if_does_not_exist(&self) -> Result<&str, MoroccoError> {
         if self.does_master_key_exist()? {
             Ok("Customer master key already existed.")
         } else {
@@ -60,7 +60,7 @@ impl KmsOps {
         }
     }
 
-    pub fn generate_iv(&self) -> Result<Vec<u8>, SquirrelError> {
+    pub fn generate_iv(&self) -> Result<Vec<u8>, MoroccoError> {
         let gen_random_request = GenerateRandomRequest { 
             number_of_bytes: Some(16)
         };
@@ -69,7 +69,7 @@ impl KmsOps {
         Ok(iv)
     }
 
-    pub fn generate_data_key(&self) -> Result<DataKey, SquirrelError> {
+    pub fn generate_data_key(&self) -> Result<DataKey, MoroccoError> {
         let gen_data_key_request = GenerateDataKeyRequest {
             key_id: self.key_id.clone(),
             number_of_bytes: Some(32),
@@ -83,15 +83,15 @@ impl KmsOps {
         })
     }
 
-    pub fn decrypt_data_key(&self, encrypted_key: Vec<u8>) -> Result<Vec<u8>, SquirrelError> {
+    pub fn decrypt_data_key(&self, encrypted_key: Vec<u8>) -> Result<Vec<u8>, MoroccoError> {
         let decrypt_request = DecryptRequest {
             ciphertext_blob: encrypted_key,
             ..Default::default()
         };
         match self.kms_client.decrypt(&decrypt_request) {
             Ok(DecryptResponse { plaintext: Some(plaintext_key), .. }) => Ok(plaintext_key),
-            Ok(_) => Err(SquirrelError { message: "Failed to decrypt the data key".to_string() }),
-            Err(err) => Err(SquirrelError::from(err))
+            Ok(_) => Err(MoroccoError { message: "Failed to decrypt the data key".to_string() }),
+            Err(err) => Err(MoroccoError::from(err))
         }
     }
 

@@ -6,26 +6,26 @@ use std::io::stderr;
 use std::io::Write;
 use std::process::exit;
 
-mod squirrel;
+mod morocco;
 mod aws;
 mod encryption;
 
-use squirrel::*;
+use morocco::*;
 use aws::AWS;
 
 // Examples of valid commands:
-// squirrel aws setup
-// squirrel aws list
-// squirrel aws get my.secret
-// squirrel aws put my.secret "oh my god"
-// squirrel aws put --overwrite my.secret "oh my god"
-// squirrel aws delete my.secret
-// squirrel aws --profile foo --region eu-west-1 --table my-custom-table list
+// morocco aws setup
+// morocco aws list
+// morocco aws get my.secret
+// morocco aws put my.secret "oh my god"
+// morocco aws put --overwrite my.secret "oh my god"
+// morocco aws delete my.secret
+// morocco aws --profile foo --region eu-west-1 --table my-custom-table list
 // TODO similar commands for GCP
 
 
 fn main() {
-    let matches = App::new("squirrel")
+    let matches = App::new("morocco")
         .version("0.1.0")
         .about("Secure secret management in the cloud")
         .subcommand(SubCommand::with_name("aws")
@@ -43,12 +43,12 @@ fn main() {
                     .arg(Arg::with_name("table")
                          .long("table")
                          .short("t")
-                         .default_value("squirrel")
+                         .default_value("morocco")
                          .help("use custom DynamoDB table"))
                     .arg(Arg::with_name("key-alias")
                          .long("key-alias")
                          .short("k")
-                         .default_value("squirrel")
+                         .default_value("morocco")
                          .help("use custom KMS customer master key"))
                     .subcommand(SubCommand::with_name("setup"))
                     .subcommand(SubCommand::with_name("list"))
@@ -88,7 +88,7 @@ fn main() {
     
 }
 
-fn construct_aws(matches: &ArgMatches) -> Result<AWS, SquirrelError> {
+fn construct_aws(matches: &ArgMatches) -> Result<AWS, MoroccoError> {
     let profile = matches.value_of("profile").map(|s| s.to_string());
     let region = matches.value_of("region").unwrap().to_string();
     let table = matches.value_of("table").unwrap().to_string();
@@ -96,17 +96,17 @@ fn construct_aws(matches: &ArgMatches) -> Result<AWS, SquirrelError> {
     aws::AWS::new(profile, region, table, key_alias)
 }
 
-fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
+fn run_subcommand<M: Morocco>(morocco: M, matches: &ArgMatches) {
     match matches.subcommand() {
         ("setup", _) => {
-            match squirrel.setup() {
+            match morocco.setup() {
                 Ok(result) => println!("Set up complete. {}", result),
                 Err(e) => bail(format!("Failed to set up KMS customer master key and/or Dynamo table! {}", e.message))
             }
         },
 
         ("list", _) => {
-            match squirrel.list() {
+            match morocco.list() {
                 Ok(ids) => {
                     for id in ids {
                         println!("{}", id);
@@ -118,7 +118,7 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
 
         ("get", Some(get_matches)) => {
             let id = get_matches.value_of("ID").unwrap().to_string();
-            match squirrel.get(id) {
+            match morocco.get(id) {
                 Ok(value) => println!("{}", String::from_utf8(value).unwrap()),
                 Err(e) => bail(format!("Failed to retrieve secret! {}", e.message))
             }
@@ -128,7 +128,7 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
             let id = put_matches.value_of("ID").unwrap().to_string();
             let value = put_matches.value_of("VALUE").unwrap().as_bytes().to_vec();
             let overwrite = put_matches.is_present("overwrite");
-            match squirrel.put(id, value, overwrite) {
+            match morocco.put(id, value, overwrite) {
                 Ok(PutResult::Stored) => println!("Stored secret."),
                 Ok(PutResult::DidNotOverwrite) => bail(format!("Failed to store secret! It was already present. If you want to overwrite the existing value, please use the --overwrite option.")),
                 Err(e) => bail(format!("Failed to store secret! {}", e.message))
@@ -137,7 +137,7 @@ fn run_subcommand<S: Squirrel>(squirrel: S, matches: &ArgMatches) {
 
         ("delete", Some(get_matches)) => {
             let id = get_matches.value_of("ID").unwrap().to_string();
-            match squirrel.delete(id) {
+            match morocco.delete(id) {
                 Ok(DeletionResult::Deleted) => println!("{}", "Deleted secret."),
                 Ok(DeletionResult::NotFound) => bail(format!("Failed to delete secret! No secret found with that ID.")),
                 Err(e) => bail(format!("Failed to delete secret! {}", e.message))

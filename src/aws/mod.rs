@@ -8,7 +8,7 @@ use self::rusoto_core::*;
 use self::rusoto_dynamodb::DynamoDbClient;
 use self::rusoto_kms::KmsClient;
 
-use squirrel::*;
+use morocco::*;
 use encryption::*;
 
 mod kms;
@@ -30,29 +30,29 @@ pub struct AWS {
 
 // TODO store values as binary when rusoto fix is released
 
-impl Squirrel for AWS {
+impl Morocco for AWS {
 
-    fn setup(&self) -> Result<String, SquirrelError> {
+    fn setup(&self) -> Result<String, MoroccoError> {
         let create_table_result = self.dynamo_ops.create_table_if_does_not_exist()?;
         let create_key_result = self.kms_ops.create_master_key_if_does_not_exist()?;
         Ok(format!("{} {}", create_table_result, create_key_result))
     }
 
-    fn list(&self) -> Result<Vec<String>, SquirrelError> {
+    fn list(&self) -> Result<Vec<String>, MoroccoError> {
         self.dynamo_ops.list_ids()
     }
 
-    fn get(&self, id: String) -> Result<Vec<u8>, SquirrelError> {
+    fn get(&self, id: String) -> Result<Vec<u8>, MoroccoError> {
         let item = self.dynamo_ops.get_item(id)?;
         self.decrypt_item(item)
     }
 
-    fn put(&self, id: String, value: Vec<u8>, overwrite: bool) -> Result<PutResult, SquirrelError> {
+    fn put(&self, id: String, value: Vec<u8>, overwrite: bool) -> Result<PutResult, MoroccoError> {
         let item = self.encrypt_value(value)?;
         self.dynamo_ops.put_item(id, item, overwrite)
     }
 
-    fn delete(&self, id: String) -> Result<DeletionResult, SquirrelError> {
+    fn delete(&self, id: String) -> Result<DeletionResult, MoroccoError> {
         self.dynamo_ops.delete_item(id)
     }
 
@@ -60,7 +60,7 @@ impl Squirrel for AWS {
 
 impl AWS {
 
-    pub fn new(profile: Option<String>, region: String, table_name: String, key_alias: String) -> Result<AWS, SquirrelError> {
+    pub fn new(profile: Option<String>, region: String, table_name: String, key_alias: String) -> Result<AWS, MoroccoError> {
         let reg = Region::from_str(region.as_str())?;
 
         let dynamo_client = DynamoDbClient::new(default_tls_client()?, AWS::build_creds_provider(profile.clone())?, reg);
@@ -84,7 +84,7 @@ impl AWS {
         AutoRefreshingProvider::with_refcell(chain_provider)
     }
 
-    fn encrypt_value(&self, value: Vec<u8>) -> Result<Item, SquirrelError> {
+    fn encrypt_value(&self, value: Vec<u8>) -> Result<Item, MoroccoError> {
         let iv = self.kms_ops.generate_iv()?;
         let data_key = self.kms_ops.generate_data_key()?;
 
@@ -96,17 +96,17 @@ impl AWS {
                 encrypted_data: ciphertext,
                 iv: iv
             }),
-            Err(_) => Err(SquirrelError { message: "Failed to encrypt secret.".to_string() })
+            Err(_) => Err(MoroccoError { message: "Failed to encrypt secret.".to_string() })
         }
     }
 
-    fn decrypt_item(&self, item: Item) -> Result<Vec<u8>, SquirrelError> {
+    fn decrypt_item(&self, item: Item) -> Result<Vec<u8>, MoroccoError> {
         let plaintext_key = self.kms_ops.decrypt_data_key(item.encrypted_data_key)?;
         match decrypt(item.encrypted_data.as_slice(), 
                       plaintext_key.as_slice(), 
                       item.iv.as_slice()) {
             Ok(plaintext_data) => Ok(plaintext_data),
-            Err(_) => Err(SquirrelError { message: "Failed to decrypt secret".to_string() })
+            Err(_) => Err(MoroccoError { message: "Failed to decrypt secret".to_string() })
         }
     }
 

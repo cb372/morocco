@@ -1,7 +1,7 @@
 extern crate rusoto_dynamodb;
 extern crate base64;
 
-use squirrel::{SquirrelError, PutResult, DeletionResult};
+use morocco::{MoroccoError, PutResult, DeletionResult};
 use aws::Item;
 
 use self::rusoto_dynamodb::*;
@@ -21,7 +21,7 @@ impl DynamoOps {
         }
     }
 
-    pub fn list_ids(&self) -> Result<Vec<String>, SquirrelError> {
+    pub fn list_ids(&self) -> Result<Vec<String>, MoroccoError> {
         let scan_input = ScanInput {
             table_name: self.table_name.clone(),
             ..Default::default()
@@ -35,11 +35,11 @@ impl DynamoOps {
                     .collect();
                 Ok(ids)
             }
-            Err(err) => Err(SquirrelError::from(err))
+            Err(err) => Err(MoroccoError::from(err))
         }
     }
 
-    pub fn get_item(&self, id: String) -> Result<Item, SquirrelError> {
+    pub fn get_item(&self, id: String) -> Result<Item, MoroccoError> {
         let key = [
             ("id".to_string(), AttributeValue { s: Some(id), ..Default::default() })
         ].iter().cloned().collect::<Key>();
@@ -52,14 +52,14 @@ impl DynamoOps {
             Ok(output) => {
                 match output.item {
                     Some(attr_map) => attribute_map_to_item(&attr_map),
-                    None => Err(SquirrelError { message: "No secret found with that ID.".to_string() })
+                    None => Err(MoroccoError { message: "No secret found with that ID.".to_string() })
                 }
             }
-            Err(err) => Err(SquirrelError::from(err))
+            Err(err) => Err(MoroccoError::from(err))
         }
     }
 
-    pub fn put_item(&self, id: String, item: Item, overwrite: bool) -> Result<PutResult, SquirrelError> {
+    pub fn put_item(&self, id: String, item: Item, overwrite: bool) -> Result<PutResult, MoroccoError> {
         // store as base64 string instead of binary to work around
         // https://github.com/rusoto/rusoto/issues/658
         let attributes = [
@@ -89,11 +89,11 @@ impl DynamoOps {
         match self.dynamo_client.put_item(&put_item_input) {
             Ok(_) => Ok(PutResult::Stored),
             Err(PutItemError::ConditionalCheckFailed(_)) => Ok(PutResult::DidNotOverwrite),
-            Err(err) => Err(SquirrelError::from(err))
+            Err(err) => Err(MoroccoError::from(err))
         }
     }
 
-    pub fn delete_item(&self, id: String) -> Result<DeletionResult, SquirrelError> {
+    pub fn delete_item(&self, id: String) -> Result<DeletionResult, MoroccoError> {
         let key = [
             ("id".to_string(), AttributeValue { s: Some(id), ..Default::default() })
         ].iter().cloned().collect::<Key>();
@@ -106,11 +106,11 @@ impl DynamoOps {
         match self.dynamo_client.delete_item(&delete_item_input) {
             Ok(_) => Ok(DeletionResult::Deleted),
             Err(DeleteItemError::ConditionalCheckFailed(_)) => Ok(DeletionResult::NotFound),
-            Err(err) => Err(SquirrelError::from(err))
+            Err(err) => Err(MoroccoError::from(err))
         }
     }
 
-    pub fn create_table_if_does_not_exist(&self) -> Result<&str, SquirrelError> {
+    pub fn create_table_if_does_not_exist(&self) -> Result<&str, MoroccoError> {
         if self.does_table_exist()? {
             Ok("Dynamo table already existed.")
         } else {
@@ -119,17 +119,17 @@ impl DynamoOps {
         }
     }
 
-    fn does_table_exist(&self) -> Result<bool, SquirrelError> {
+    fn does_table_exist(&self) -> Result<bool, MoroccoError> {
         let table_name = self.table_name.clone();
         let describe_table_input = DescribeTableInput { table_name };
         match self.dynamo_client.describe_table(&describe_table_input) {
             Ok(output) => Ok(output.table.is_some()),
             Err(DescribeTableError::ResourceNotFound(_)) => Ok(false),
-            Err(other) => Err(SquirrelError::from(other))
+            Err(other) => Err(MoroccoError::from(other))
         }
     }
 
-    fn create_table(&self) -> Result<(), SquirrelError> {
+    fn create_table(&self) -> Result<(), MoroccoError> {
         let table_name = self.table_name.clone();
         let create_table_input = CreateTableInput { 
             attribute_definitions: vec![ AttributeDefinition { 
@@ -153,7 +153,7 @@ impl DynamoOps {
 
 }
 
-fn attribute_map_to_item(attribute_map: &AttributeMap) -> Result<Item, SquirrelError> {
+fn attribute_map_to_item(attribute_map: &AttributeMap) -> Result<Item, MoroccoError> {
     let encrypted_key_opt = attribute_map.get("encrypted_data_key").and_then(|x| x.s.clone());
     let encrypted_data_opt = attribute_map.get("encrypted_data").and_then(|x| x.s.clone());
     let iv_opt = attribute_map.get("iv").and_then(|x| x.s.clone());
@@ -169,7 +169,7 @@ fn attribute_map_to_item(attribute_map: &AttributeMap) -> Result<Item, SquirrelE
                 iv: iv
             })
         },
-        _ => Err(SquirrelError { message: "Item did not contain the expected fields".to_string() })
+        _ => Err(MoroccoError { message: "Item did not contain the expected fields".to_string() })
     }
 }
 
